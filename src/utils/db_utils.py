@@ -6,14 +6,14 @@ from sqlalchemy import create_engine, insert
 
 load_dotenv()
 
-AZURE_DB_PW_DEV = os.getenv("DS_AZ_DB_DEV_PW")
-AZURE_DB_PW_PROD = os.getenv("DS_AZ_DB_PROD_PW")
+AZURE_DB_PW_DEV = os.getenv("DSCI_AZ_DB_DEV_PW")
+AZURE_DB_PW_PROD = os.getenv("DSCI_AZ_DB_PROD_PW")
 
-DS_AZ_DB_DEV_HOST = os.getenv("DS_AZ_DB_DEV_HOST")
-DS_AZ_DB_PROD_HOST = os.getenv("DS_AZ_DB_PROD_HOST")
+DS_AZ_DB_DEV_HOST = os.getenv("DSCI_AZ_DB_DEV_HOST")
+DS_AZ_DB_PROD_HOST = os.getenv("DSCI_AZ_DB_PROD_HOST")
 
-AZURE_DB_UID_PROD = os.getenv("DS_AZ_DB_PROD_UID")
-AZURE_DB_UID_DEV = os.getenv("DS_AZ_DB_DEV_UID")
+AZURE_DB_UID_PROD = os.getenv("DSCI_AZ_DB_PROD_UID")
+AZURE_DB_UID_DEV = os.getenv("DSCI_AZ_DB_DEV_UID")
 
 AZURE_DB_BASE_URL = "postgresql+psycopg2://{uid}:{pw}@{host}/postgres"
 
