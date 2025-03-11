@@ -18,7 +18,7 @@ AZURE_DB_UID_DEV = os.getenv("DSCI_AZ_DB_DEV_UID")
 AZURE_DB_BASE_URL = "postgresql+psycopg2://{uid}:{pw}@{host}/postgres"
 
 
-def get_engine(stage: Literal["dev", "prod"] = "dev"):
+def get_engine(stage: Literal["dev", "prod"] = "prod"):
     """
     Create a SQLAlchemy engine for connecting to Azure SQL Database.
 
