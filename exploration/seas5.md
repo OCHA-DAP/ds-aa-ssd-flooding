@@ -46,9 +46,6 @@ pcode = "SS"
 ```python
 query = f"SELECT * FROM public.polygon WHERE pcode = '{pcode}'"
 df_adm = pd.read_sql(query, stratus.get_engine(stage="prod"))
-```
-
-```python
 adm_name = df_adm.iloc[0]["name"]
 ```
 

@@ -7,15 +7,32 @@ from src.utils import blob_utils, db_utils
 
 def load_seas5(pcode: str = "SS"):
     engine = db_utils.get_engine("prod")
-    query = f"SELECT * FROM public.seas5 WHERE pcode = '{pcode}' "
-    df = pd.read_sql(query, engine, parse_dates=["valid_date", "issued_date"])
+    query = "SELECT * FROM public.seas5 WHERE pcode = :pcode"
+    df = pd.read_sql(
+        query,
+        engine,
+        params={"pcode": pcode},
+        parse_dates=["valid_date", "issued_date"],
+    )
     return df
 
 
 def load_seas5_multiple_pcodes(pcodes: List[str]):
     engine = db_utils.get_engine("prod")
-    query = f"SELECT * FROM public.seas5 WHERE pcode IN {tuple(pcodes)} "
-    df = pd.read_sql(query, engine, parse_dates=["valid_date", "issued_date"])
+
+    # Build the SQL query with the correct number of placeholders
+    placeholders = ", ".join(["%s"] * len(pcodes))
+    query = f"SELECT * FROM public.seas5 WHERE pcode IN ({placeholders})"
+
+    # Wrap pcodes in a tuple, which is what's expected for positional arguments
+    with engine.connect() as conn:
+        df = pd.read_sql(
+            query,
+            conn,
+            params=tuple(pcodes),
+            parse_dates=["valid_date", "issued_date"],
+        )
+
     return df
 
 

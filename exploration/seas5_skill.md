@@ -29,6 +29,7 @@ import calendar
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+import ocha_stratus as stratus
 
 from src.datasources import seas5, era5
 from src.utils.rp_calc import calculate_one_group_rp
@@ -40,6 +41,12 @@ from src.utils.rp_calc import calculate_one_group_rp
 pcode = "SS"
 min_year = 1981
 max_year = 2024
+```
+
+```python
+query = f"SELECT * FROM public.polygon WHERE pcode = '{pcode}'"
+df_adm = pd.read_sql(query, stratus.get_engine(stage="prod"))
+adm_name = df_adm.iloc[0]["name"]
 ```
 
 ## Load and combine data
@@ -73,6 +80,10 @@ df_compare = df_compare[
 
 ```python
 rp = 5
+
+# low_is_bad = True would correspond to drought,
+# low_is_bad = False would correspond to flooding
+
 low_is_bad = False
 dicts = []
 for i_mo in range(1, 13):
@@ -180,7 +191,7 @@ ax.annotate("Valid month", (11, 4), rotation=-50, color="grey")
 
 ax.axis("off")
 
-ax.set_title(f"SEAS5-ERA5 {metric_str} for {pcode}{title_append}", pad=40)
+ax.set_title(f"SEAS5-ERA5 {metric_str} for {adm_name}{title_append}", pad=40)
 ```
 
 ```python
@@ -250,13 +261,13 @@ ax.annotate("Valid month", (11, 4), rotation=-50, color="grey")
 
 ax.axis("off")
 
-ax.set_title(f"SEAS5-ERA5 {metric_str} for {pcode}{title_append}", pad=40)
+ax.set_title(f"SEAS5-ERA5 {metric_str} for {adm_name}{title_append}", pad=40)
 ```
 
 ### Align leadtimes
 
 ```python
-season_months = [3, 4, 5]
+season_months = [7, 8, 9]
 
 season_months_str = "".join([calendar.month_abbr[x][0] for x in season_months])
 

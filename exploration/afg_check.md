@@ -142,7 +142,6 @@ ds_cds
 
 ```python
 for year_i in [0, 1]:
-    for lt in
     filename = f"seas5_issued_jan_valid_mam_{2024+year_i}.tif"
     output_path = save_dir / filename
     ds_cds = ds_cds.rio.write_crs(4326)
@@ -240,10 +239,6 @@ df_rp[df_rp["name"].isin(name_list) & (df_rp["year"] == 2025)]
 ```
 
 ## Raster check
-
-```python
-
-```
 
 ```python
 import matplotlib.pyplot as plt
