@@ -14,6 +14,8 @@ jupyter:
 ---
 
 # SEAS5
+<!-- markdownlint-disable MD013 -->
+Loads SEAS5 and ERA5 forecasts for a `pcode` to plot current value compared to historical values.
 
 ```python
 %load_ext jupyter_black
@@ -31,6 +33,7 @@ import pandas as pd
 import xarray as xr
 import numpy as np
 import seaborn as sns
+import ocha_stratus as stratus
 
 from src.datasources import seas5, era5
 from src.utils import blob_utils, rp_calc
@@ -38,6 +41,15 @@ from src.utils import blob_utils, rp_calc
 
 ```python
 pcode = "SS"
+```
+
+```python
+query = f"SELECT * FROM public.polygon WHERE pcode = '{pcode}'"
+df_adm = pd.read_sql(query, stratus.get_engine(stage="prod"))
+```
+
+```python
+adm_name = df_adm.iloc[0]["name"]
 ```
 
 ```python
@@ -53,6 +65,10 @@ df_seas5 = seas5.load_seas5(pcode=pcode)
 ```
 
 ```python
+df_seas5
+```
+
+```python
 df_seas5.groupby(df_seas5["valid_date"].dt.month)["mean"].mean().plot()
 ```
 
@@ -61,11 +77,18 @@ df_seas5.groupby(df_seas5["valid_date"].dt.month)["mean"].mean()
 ```
 
 ```python
-issued_month = 3
-valid_months = [7, 8, 9]
-min_year = 1981
+calendar.month_abbr[3][0]
+```
 
-df_jj = (
+```python
+issued_month = 4
+valid_months = [7, 8, 9]
+# valid_months = [4]
+min_year = 2000
+
+valid_mo_str = "".join([calendar.month_abbr[x][0] for x in valid_months])
+
+df_plot = (
     df_seas5[
         (df_seas5["valid_date"].dt.month.isin(valid_months))
         & (df_seas5["issued_date"].dt.month == issued_month)
@@ -75,19 +98,19 @@ df_jj = (
     .mean()
     .reset_index()
 )
-df_jj["year"] = df_jj["issued_date"].dt.year
+df_plot["year"] = df_plot["issued_date"].dt.year
 
-df_jj = rp_calc.calculate_one_group_rp(df_jj, ascending=False)
+df_plot = rp_calc.calculate_one_group_rp(df_plot, ascending=False)
 
 issued_month_str = calendar.month_abbr[issued_month]
 
 valid_months_str = "".join([calendar.month_abbr[x][0] for x in valid_months])
 
-thresh = df_jj["mean"].quantile(2 / 3)
+thresh = df_plot["mean"].quantile(2 / 3)
 
 fig, ax = plt.subplots(dpi=200)
 
-current_row = df_jj[df_jj["issued_date"].dt.year == 2025].iloc[0]
+current_row = df_plot[df_plot["issued_date"].dt.year == 2025].iloc[0]
 
 ax.annotate(
     f"  2025\n  RP = {current_row['mean_rp']:.1f} yrs",
@@ -98,13 +121,13 @@ ax.annotate(
 )
 
 for rp, color in zip([3, 5], ["darkorange", "crimson"]):
-    thresh = df_jj["mean"].quantile((rp - 1) / rp)
+    thresh = df_plot["mean"].quantile((rp - 1) / rp)
     ax.axhline(thresh, color=color)
     ax.annotate(
         f" {rp}-yr RP", (2027, thresh), va="center", ha="left", color=color
     )
 
-df_jj.plot(x="year", y="mean", ax=ax, legend=False, color="k")
+df_plot.plot(x="year", y="mean", ax=ax, legend=False, color="k")
 
 ax.plot(
     [2025],
@@ -115,8 +138,8 @@ ax.plot(
 )
 
 ax.set_title(
-    f"South Sudan SEAS5 forecast (since {min_year})\n"
-    f"Issued: {issued_month_str}, Valid: {valid_months_str}"
+    f"{adm_name} SEAS5 forecast (since {min_year})\n"
+    f"Issued: {issued_month_str}, Valid: {valid_mo_str}"
 )
 ax.set_xlabel("Year")
 ax.set_ylabel("Mean daily precipitation,\n averaged over whole country (mm)")
@@ -128,14 +151,15 @@ ax.spines["right"].set_visible(False)
 ```
 
 ```python
-mask
+df_compare = df_seas5.merge(
+    df_era5,
+    on=["valid_date", "pcode", "adm_level", "iso3"],
+    suffixes=["_s", "_e"],
+    how="left",
+)
 ```
 
 ```python
-issued_month = 3
-valid_months = [7, 8, 9]
-min_year = 1981
-
 df_season = (
     df_compare[
         (df_compare["valid_date"].dt.month.isin(valid_months))
@@ -156,18 +180,6 @@ corr
 ```
 
 ```python
-df_season
-```
-
-```python
-df_season.corr()
-```
-
-```python
-valid_months_str = "".join([calendar.month_abbr[x][0] for x in valid_months])
-```
-
-```python
 fig, ax = plt.subplots(figsize=(8, 8), dpi=200)
 
 for year, row in df_season.set_index("year").iterrows():
@@ -176,6 +188,7 @@ for year, row in df_season.set_index("year").iterrows():
         (row["mean_s"], row["mean_e"]),
         ha="center",
         va="center",
+        fontsize=7,
     )
 
 df_season.plot(x="mean_s", y="mean_e", linewidth=0, legend=False, ax=ax)
@@ -195,13 +208,15 @@ ax.set_xlabel(
 )
 ax.set_ylabel("Actual mean daily precipitation (mm)")
 
-ax.set_title(f"SEA5-ERA5 comparison\n{valid_months_str} season, {pcode}")
+ax.set_title(f"SEA5-ERA5 comparison for {adm_name}, valid {valid_mo_str}")
 
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 ```
 
 ## Full correlation analysis
+
+Looking at correlation per leadtime per issued month.
 
 ```python
 df_compare = df_seas5.merge(
@@ -305,7 +320,9 @@ plt.ylabel("Issue month")
 plt.show()
 ```
 
-## Nicaragua
+## Nicaragua / other countries
+
+Can ignore below - just sandbox for checking other countries or admins.
 
 ```python
 ADM1_AOI_PCODES = ["NI25", "NI20", "NI05", "NI40"]
@@ -316,7 +333,7 @@ df_seas5 = seas5.load_seas5_multiple_pcodes(ADM1_AOI_PCODES)
 ```
 
 ```python
-df_seas5 = seas5.load_seas5("NI")
+df_seas5 = seas5.load_seas5("AO")
 ```
 
 ```python
@@ -324,8 +341,10 @@ df_seas5
 ```
 
 ```python
-issued_month = 2
-valid_months = [5, 6, 7, 8]
+issued_month = 4
+# valid_months = [5, 6, 7, 8]
+# valid_months = [7, 8, 9]
+valid_months = [4]
 ```
 
 ```python
@@ -369,4 +388,73 @@ df_season.sort_values("mean")
 
 ```python
 45 / 13
+```
+
+```python
+issued_month = 3
+valid_months = [7, 8, 9]
+min_year = 1981
+
+df_jj = (
+    df_seas5[
+        (df_seas5["valid_date"].dt.month.isin(valid_months))
+        & (df_seas5["issued_date"].dt.month == issued_month)
+        & (df_seas5["valid_date"].dt.year >= min_year)
+    ]
+    .groupby("issued_date")["mean"]
+    .mean()
+    .reset_index()
+)
+df_jj["year"] = df_jj["issued_date"].dt.year
+
+df_jj = rp_calc.calculate_one_group_rp(df_jj, ascending=True)
+
+issued_month_str = calendar.month_abbr[issued_month]
+
+valid_months_str = "".join([calendar.month_abbr[x][0] for x in valid_months])
+
+fig, ax = plt.subplots(dpi=200)
+
+current_row = df_jj[df_jj["issued_date"].dt.year == 2025].iloc[0]
+
+ax.annotate(
+    f"  2025\n  RP = {current_row['mean_rp']:.1f} yrs",
+    (2025, current_row["mean"]),
+    ha="left",
+    va="center",
+    fontsize=8,
+)
+
+for rp, color in zip([3, 5], ["darkorange", "crimson"]):
+    thresh = df_jj["mean"].quantile(1 / rp)
+    ax.axhline(thresh, color=color)
+    ax.annotate(
+        f" {rp}-yr RP", (2027, thresh), va="center", ha="left", color=color
+    )
+
+df_jj.plot(x="year", y="mean", ax=ax, legend=False, color="k")
+
+ax.plot(
+    [2025],
+    [current_row["mean"]],
+    marker=".",
+    color="k",
+    markersize=10,
+)
+
+ax.set_title(
+    f"South Sudan SEAS5 forecast (since {min_year})\n"
+    f"Issued: {issued_month_str}, Valid: {valid_months_str}"
+)
+ax.set_xlabel("Year")
+ax.set_ylabel("Mean daily precipitation,\n averaged over whole country (mm)")
+
+ax.set_xlim(left=min_year, right=2027)
+
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
+```
+
+```python
+
 ```

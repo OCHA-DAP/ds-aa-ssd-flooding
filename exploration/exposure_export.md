@@ -15,7 +15,7 @@ jupyter:
 
 # Exposure export
 
-Exporting flood exposure data to CSV
+Exporting flood exposure data to CSV for sharing
 
 ```python
 %load_ext jupyter_black
@@ -62,6 +62,8 @@ df_exp.pivot(index="date_1900", columns="year", values="sum").plot()
 ```
 
 ```python
-blob_name = f"{blob_utils.PROJECT_PREFIX}/processed/floodscan/{pcode}_flood_exposure.csv"
+import src.constants
+
+blob_name = f"{src.constants.PROJECT_PREFIX}/processed/floodscan/{pcode}_flood_exposure.csv"
 blob_utils.upload_csv_to_blob(df_exp, blob_name)
 ```

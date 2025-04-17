@@ -15,6 +15,10 @@ jupyter:
 
 # AFG raster sense check
 
+Sense-checking rasters for Afghanistan monitoring.
+
+Not relevant for this repo but just put here for quick check.
+
 ```python
 %load_ext jupyter_black
 %load_ext autoreload

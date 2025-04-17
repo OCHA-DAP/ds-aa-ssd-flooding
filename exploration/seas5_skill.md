@@ -15,6 +15,8 @@ jupyter:
 
 # SEAS5 skill
 
+Loads ERA5 and SEAS5 monthly data for a PCODE, and produces skill plots per leadtime.
+
 ```python
 %load_ext jupyter_black
 %load_ext autoreload
@@ -47,6 +49,10 @@ df_era5 = era5.load_era5(pcode=pcode)
 ```
 
 ```python
+df_era5.groupby(df_era5["valid_date"].dt.month)["mean"].mean().plot.bar()
+```
+
+```python
 df_seas5 = seas5.load_seas5(pcode=pcode)
 ```
 
@@ -66,7 +72,7 @@ df_compare = df_compare[
 ## Calculate metrics
 
 ```python
-rp = 3
+rp = 5
 low_is_bad = False
 dicts = []
 for i_mo in range(1, 13):
