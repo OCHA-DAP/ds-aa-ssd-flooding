@@ -7,11 +7,11 @@ from src.utils import blob_utils, db_utils
 
 def load_seas5(pcode: str = "SS"):
     engine = db_utils.get_engine("prod")
-    query = "SELECT * FROM public.seas5 WHERE pcode = :pcode"
+    query = "SELECT * FROM public.seas5 WHERE pcode = %s"
     df = pd.read_sql(
         query,
         engine,
-        params={"pcode": pcode},
+        params=(pcode,),
         parse_dates=["valid_date", "issued_date"],
     )
     return df
