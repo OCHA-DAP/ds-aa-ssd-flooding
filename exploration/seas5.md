@@ -50,6 +50,10 @@ adm_name = df_adm.iloc[0]["name"]
 ```
 
 ```python
+adm_name
+```
+
+```python
 df_era5 = era5.load_era5(pcode=pcode)
 ```
 
@@ -71,10 +75,6 @@ df_seas5.groupby(df_seas5["valid_date"].dt.month)["mean"].mean().plot()
 
 ```python
 df_seas5.groupby(df_seas5["valid_date"].dt.month)["mean"].mean()
-```
-
-```python
-calendar.month_abbr[3][0]
 ```
 
 ```python
@@ -185,7 +185,8 @@ for year, row in df_season.set_index("year").iterrows():
         (row["mean_s"], row["mean_e"]),
         ha="center",
         va="center",
-        fontsize=7,
+        fontsize=10,
+        alpha=0.5,
     )
 
 df_season.plot(x="mean_s", y="mean_e", linewidth=0, legend=False, ax=ax)
@@ -200,12 +201,13 @@ ax.annotate(
     color="crimson",
 )
 
-ax.set_xlabel(
-    f"Forecasted mean daily precipitation, issued {calendar.month_abbr[issued_month]} (mm)"
-)
-ax.set_ylabel("Actual mean daily precipitation (mm)")
+ax.set_xlabel("Forecasted precipitation (mm) [SEAS5]")
+ax.set_ylabel("Actual precipitation (mm) [ERA5]")
 
-ax.set_title(f"SEA5-ERA5 comparison for {adm_name}, valid {valid_mo_str}")
+ax.set_title(
+    f"{adm_name} - {valid_mo_str} mean daily precipitation\n"
+    f"Forecast issue month: {calendar.month_abbr[issued_month]}"
+)
 
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
