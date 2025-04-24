@@ -79,7 +79,9 @@ df_seas5.groupby(df_seas5["valid_date"].dt.month)["mean"].mean()
 
 ```python
 issued_month = 4
-valid_months = [7, 8, 9]
+valid_months = [4, 5, 7, 8]
+# valid_months = [4, 5, 7, 8, 9, 10]
+# valid_months = [7, 8, 9]
 # valid_months = [4]
 min_year = 2000
 

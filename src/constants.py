@@ -1,2 +1,4 @@
 ISO3 = "SSD"
 PROJECT_PREFIX = "ds-aa-ssd-flooding"
+
+CERF_YEARS = [2019, 2020, 2021, 2022, 2024]
