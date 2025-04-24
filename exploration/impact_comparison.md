@@ -35,6 +35,7 @@ import ocha_stratus as stratus
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import statsmodels.api as sm
 
 from src.constants import *
 from src.datasources import era5, seas5
@@ -63,6 +64,21 @@ df_exp_yearly = (
 )
 df_exp_yearly["max_diff"] = df_exp_yearly["max"] - df_exp_yearly["min"]
 df_exp_yearly["mean_diff"] = df_exp_yearly["mean"] - df_exp_yearly["min"]
+```
+
+```python
+df_exp_yearly["max_prev"] = df_exp_yearly["max"].shift()
+df_exp_yearly["mean_prev"] = df_exp_yearly["mean"].shift()
+```
+
+```python
+window = 3
+df_exp_yearly[f"mean_roll{window}"] = (
+    df_exp_yearly["mean"].rolling(window).mean()
+)
+df_exp_yearly[f"max_diff_mean_roll{window}"] = (
+    df_exp_yearly["max"] / df_exp_yearly[f"mean_roll{window}"]
+)
 ```
 
 ```python
@@ -167,7 +183,7 @@ df_seas5_yearly
 
 ### ERA5
 
-Load and filter ERA5 data to same `valid_month`
+Load and filter ERA5 data to same `valid_months` as SEAS5.
 
 ```python
 df_era5 = era5.load_era5(pcode=pcode)
@@ -205,22 +221,46 @@ df_emdat_yearly = (
 ```
 
 ```python
+# Ensure Start Year is the index
+df_emdat_yearly = df_emdat_yearly.set_index("Start Year")
+
+# Reindex to fill in all years 2000–2024
+df_emdat_yearly = df_emdat_yearly.reindex(range(2000, 2025), fill_value=0)
+
+# Reset index if you want to plot with "Start Year" as a column
+df_emdat_yearly = df_emdat_yearly.reset_index().rename(
+    columns={"index": "Start Year"}
+)
+df_emdat_yearly["Total Affected"] = df_emdat_yearly["Total Affected"].astype(
+    int
+)
+```
+
+```python
+df_emdat_yearly
+```
+
+```python
 df_emdat_yearly.plot(x="Start Year", y="Total Affected", kind="bar")
 ```
 
 ## Combine
 
 ```python
-df_compare = (
+df_compare_full = (
     df_exp_yearly.merge(
         df_era5_yearly.rename(
             columns={
                 "mean": "mean_era5",
                 "mean_detrended": "mean_era5_detrended",
             }
-        )
+        ),
+        how="outer",
     )
-    .merge(df_seas5_yearly)
+    .merge(
+        df_seas5_yearly,
+        how="outer",
+    )
     .rename(
         columns={
             "mean": "mean_seas5",
@@ -234,16 +274,23 @@ df_compare = (
                 "Total Affected": "total_affected",
             }
         ),
-        how="left",
+        how="outer",
     )
 ).rename(columns={"valid_date": "year"})
-df_compare = df_compare[
-    (df_compare["year"] < 2025) & (df_compare["year"] >= 2006)
-]
-df_compare["cerf"] = df_compare["year"].isin(CERF_YEARS)
-df_compare = df_compare.fillna(0)
+df_compare_full["cerf"] = df_compare_full["year"].isin(CERF_YEARS)
+df_compare = df_compare_full[
+    (df_compare_full["year"] < 2025) & (df_compare_full["year"] >= 2000)
+].copy()
 df_compare
 ```
+
+```python
+df_compare_full
+```
+
+## Analysis
+
+### Correlations
 
 ```python
 df_compare.set_index("year").corr()
@@ -261,8 +308,10 @@ df_compare.set_index("year").corr()["mean_diff_exp"].plot(kind="bar")
 df_compare.set_index("year").corr()["cerf"].plot(kind="bar")
 ```
 
+### Plotting
+
 ```python
-def plot_comparison(df, xcol, ycol, sizecol=None, labels=None):
+def plot_comparison(df, xcol, ycol, sizecol=None, labels=None, rotation=0):
     df = df.copy()
     fig, ax = plt.subplots(dpi=200, figsize=(7, 7))
 
@@ -288,6 +337,7 @@ def plot_comparison(df, xcol, ycol, sizecol=None, labels=None):
             ha="center",
             va="center",
             color=row["color"],
+            rotation=rotation,
         )
 
     if labels is None:
@@ -319,6 +369,19 @@ plot_comparison(
 ```
 
 ```python
+plot_comparison(
+    df_compare,
+    "max_diff_mean_roll3_exp",
+    "total_affected",
+    labels={
+        "x": "Average adjusted flood exposure during year [Floodscan]",
+        "y": "Total people affected during year [EM-DAT]",
+        "title": "Impact vs. exposure comparison",
+    },
+)
+```
+
+```python
 fig, ax = plot_comparison(
     df_compare,
     "mean_era5",
@@ -330,10 +393,6 @@ fig, ax = plot_comparison(
         "title": "Exposure vs. observed rainfall comparison",
     },
 )
-```
-
-```python
-df_seas5_yearly.set_index("valid_date").loc[2025]["mean"]
 ```
 
 ```python
@@ -379,6 +438,104 @@ fig, ax = plot_comparison(
     df_compare,
     "mean_seas5_detrended",
     "mean_era5_detrended",
+)
+```
+
+## Modeling
+
+```python
+df_modeling = df_compare_full.copy()
+# df_modeling = df_modeling[
+#     (df_modeling["year"] >= 2006) & (df_modeling["year"] < 2025)
+# ]
+df_modeling["year_dummy"] = (df_modeling["year"] >= 2019).astype(int)
+```
+
+```python
+df_modeling.loc[df_modeling["year"] == 2025, "mean_diff_exp"] = np.nan
+```
+
+```python
+# Select inputs and output
+# input_cols = ["year_dummy", "mean_seas5"]
+input_cols = ["min_exp", "mean_seas5"]
+output_col = "total_affected"
+X = df_modeling[input_cols]
+y = df_modeling[output_col]
+
+# Drop rows with missing values
+df_clean = pd.concat([X, y], axis=1).dropna()
+X = df_clean[input_cols]
+y = df_clean[output_col]
+
+# Add constant for intercept
+X = sm.add_constant(X)
+
+# Fit linear regression model
+model = sm.OLS(y, X).fit()
+
+# Show summary
+print(model.summary())
+
+df_modeling["reg_pred"] = model.predict(
+    sm.add_constant(df_modeling[input_cols])
+)
+```
+
+```python
+df_modeling.corr()["total_affected"].plot(kind="bar")
+```
+
+```python
+ycol = output_col
+xcol = "reg_pred"
+fig, ax = plot_comparison(
+    df_modeling,
+    xcol,
+    ycol,
+    rotation=45,
+)
+current_pred = df_modeling.set_index("year").loc[2025, xcol]
+ax.axvline(
+    current_pred,
+    color="mediumorchid",
+    linestyle="--",
+)
+ax.annotate(
+    "2025 prediction",
+    (current_pred, 0.5e6),
+    rotation=90,
+    va="top",
+    ha="right",
+    color="mediumorchid",
+)
+ax.axvline(0, color="grey", linewidth=0.5, linestyle="--")
+ax.axhline(0, color="grey", linewidth=0.5, linestyle="--")
+ax.plot([-2e6, 2e6], [-2e6, 2e6], color="grey", linewidth=1, linestyle="--")
+ax.annotate(
+    "45°",
+    (1.5e6, 1.5e6),
+    color="grey",
+    rotation=45,
+    fontstyle="italic",
+    va="bottom",
+    ha="left",
+)
+ax.set_ylim([-0.2e6, 1.5e6])
+ax.set_xlim([-0.2e6, 1.5e6])
+
+ax.set_ylabel("Actual total affected [EM-DAT]")
+ax.set_xlabel("Predicted total affected [regression model]")
+
+ax.set_title("Regression model impact predictions\n")
+ax.text(
+    0.5,
+    1.04,
+    # "Variables: Apr SEAS5 forecast, ≥2019 dummy",
+    "Variables: Apr SEAS5 forecast, min. exposure during year",
+    transform=ax.transAxes,
+    ha="center",
+    va="top",
 )
 ```
 
