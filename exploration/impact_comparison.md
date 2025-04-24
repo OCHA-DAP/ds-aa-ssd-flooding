@@ -85,6 +85,8 @@ df_exp_yearly
 
 ### SEAS5
 
+Load and filter SEAS5 data to specific `issued_month`.
+
 ```python
 df_seas5_all = seas5.load_seas5(pcode=pcode)
 ```
@@ -164,6 +166,8 @@ df_seas5_yearly
 ```
 
 ### ERA5
+
+Load and filter ERA5 data to same `valid_month`
 
 ```python
 df_era5 = era5.load_era5(pcode=pcode)
