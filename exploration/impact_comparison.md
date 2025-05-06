@@ -39,6 +39,21 @@ import statsmodels.api as sm
 
 from src.constants import *
 from src.datasources import era5, seas5
+from src.utils.timeseries import detrend_column
+```
+
+```python
+pcode = "SS"
+```
+
+```python
+query = f"SELECT * FROM public.polygon WHERE pcode = '{pcode}'"
+df_adm = pd.read_sql(query, stratus.get_engine(stage="prod"))
+adm_name = df_adm.iloc[0]["name"]
+```
+
+```python
+adm_name
 ```
 
 ## Load data
@@ -46,7 +61,6 @@ from src.datasources import era5, seas5
 ### Exposure
 
 ```python
-pcode = "SS"
 query = f"SELECT * FROM app.floodscan_exposure WHERE pcode = '{pcode}'"
 ```
 
@@ -108,10 +122,17 @@ df_seas5_all = seas5.load_seas5(pcode=pcode)
 ```
 
 ```python
-issued_month = 4
+issued_month = 5
 issued_mo_str = calendar.month_abbr[issued_month]
 df_seas5_imo = df_seas5_all[
     df_seas5_all["issued_date"].dt.month == issued_month
+]
+```
+
+```python
+valid_months_override = [7, 8, 9]
+df_seas5_imo = df_seas5_imo[
+    df_seas5_imo["valid_date"].dt.month.isin(valid_months_override)
 ]
 ```
 
@@ -130,55 +151,32 @@ df_seas5_yearly = (
 ```
 
 ```python
-def detrend_column(
-    df: pd.DataFrame, col: str, index_col: str = "valid_date"
-) -> pd.DataFrame:
-    """
-    Detrend a column in a DataFrame using linear regression (via NumPy).
-
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        The input DataFrame. Must contain a datetime column.
-    col : str
-        The name of the column to detrend.
-    time_col : str
-        The name of the datetime column. Default is "valid_date".
-
-    Returns:
-    --------
-    pd.DataFrame
-        Copy of the input DataFrame with a new column: <col>_detrended
-    """
-    df_sorted = df.sort_values(index_col).copy()
-
-    # Convert datetime to numeric (days since min)
-    x = df_sorted[index_col]
-    y = df_sorted[col].values
-
-    # Linear regression fit
-    A = np.vstack([x, np.ones_like(x)]).T
-    a, b = np.linalg.lstsq(A, y, rcond=None)[0]
-
-    trend = a * x + b
-    detrended = y - trend
-    detrended += y.mean()  # Shift to preserve original mean
-
-    df_sorted[f"{col}_detrended"] = detrended
-
-    return df_sorted
+df_seas5_yearly = detrend_column(df_seas5_yearly, col="mean", max_index=2024)
+# df_seas5_yearly = detrend_column(
+#     df_seas5_yearly, col="mean", min_index=2000, max_index=2024
+# )
 ```
 
 ```python
-df_seas5_yearly = detrend_column(df_seas5_yearly, col="mean")
-```
-
-```python
-df_seas5_yearly.set_index("valid_date").plot()
+ax = df_seas5_yearly.set_index("valid_date").plot()
+ax.set_title("seas5")
 ```
 
 ```python
 df_seas5_yearly
+```
+
+```python
+df_seas5_monthwise = df_seas5_imo.copy()
+df_seas5_monthwise["valid_month"] = df_seas5_monthwise["valid_date"].dt.month
+df_seas5_monthwise["valid_year"] = df_seas5_monthwise["valid_date"].dt.year
+df_seas5_monthwise = df_seas5_monthwise.pivot(
+    index="valid_year", columns="valid_month", values="mean"
+)
+df_seas5_monthwise = df_seas5_monthwise.rename(
+    columns={x: f"mean_seas5_mo{x}" for x in df_seas5_monthwise.columns}
+).reset_index()
+df_seas5_monthwise
 ```
 
 ### ERA5
@@ -201,10 +199,64 @@ df_era5_yearly = df_era5_yearly[df_era5_yearly["valid_date"] < 2025]
 
 ```python
 df_era5_yearly = detrend_column(df_era5_yearly, "mean")
+# df_era5_yearly = detrend_column(df_era5_yearly, "mean", min_index=2000)
 ```
 
 ```python
-df_era5_yearly.set_index("valid_date").plot()
+ax = df_era5_yearly.set_index("valid_date").plot()
+ax.set_title("era5")
+```
+
+```python
+df_era5_yearly
+```
+
+#### Month-wise
+
+```python
+df_era5
+```
+
+```python
+[x for x in df_era5_monthwise]
+```
+
+```python
+df_era5_monthwise = df_era5[df_era5["valid_date"].dt.year < 2025].copy()
+df_era5_monthwise["valid_month"] = df_era5_monthwise["valid_date"].dt.month
+df_era5_monthwise["valid_year"] = df_era5_monthwise["valid_date"].dt.year
+df_era5_monthwise = df_era5_monthwise.pivot(
+    index="valid_year", columns="valid_month", values="mean"
+)
+df_era5_monthwise = df_era5_monthwise.rename(
+    columns={x: f"mean_era5_mo{x}" for x in df_era5_monthwise.columns}
+).reset_index()
+for col in df_era5_monthwise:
+    if col == "valid_year":
+        continue
+    df_era5_monthwise = detrend_column(
+        df_era5_monthwise, col, index_col="valid_year"
+    )
+```
+
+```python
+df_era5_monthwise.merge(
+    df_exp_yearly.rename(columns={"valid_date": "valid_year"})
+).corr()["mean_diff_exp"][
+    [x for x in df_era5_monthwise if "detrended" in x]
+].plot(
+    kind="bar"
+)
+```
+
+```python
+df_era5_monthwise.set_index("valid_year").shift().reset_index().merge(
+    df_exp_yearly.rename(columns={"valid_date": "valid_year"})
+).corr()["mean_diff_exp"][
+    [x for x in df_era5_monthwise if "detrended" in x]
+].plot(
+    kind="bar"
+)
 ```
 
 ### EM-DAT
@@ -242,6 +294,30 @@ df_emdat_yearly
 
 ```python
 df_emdat_yearly.plot(x="Start Year", y="Total Affected", kind="bar")
+```
+
+```python
+df_emdat_yearly
+```
+
+```python
+df_era5_monthwise.merge(
+    df_emdat_yearly.rename(columns={"Start Year": "valid_year"})
+).corr()["Total Affected"][
+    [x for x in df_era5_monthwise if "detrended" in x]
+].plot(
+    kind="bar"
+)
+```
+
+```python
+df_era5_monthwise.set_index("valid_year").shift().reset_index().merge(
+    df_emdat_yearly.rename(columns={"Start Year": "valid_year"})
+).corr()["Total Affected"][
+    [x for x in df_era5_monthwise if "detrended" in x]
+].plot(
+    kind="bar"
+)
 ```
 
 ## Combine
@@ -294,6 +370,55 @@ df_compare_full
 
 ```python
 df_compare.set_index("year").corr()
+```
+
+```python
+df_compare_full.set_index("year").corr()[
+    [x for x in df_compare_full.columns if "5" in x]
+]
+```
+
+```python
+df_compare.set_index("year").corr()[
+    [x for x in df_compare_full.columns if "5" in x]
+]
+```
+
+```python
+# quick F1 comparison between raw and detrended
+dicts = []
+df_compare_metrics = df_compare_full.copy()
+
+for rp in [2, 3, 5, 10]:
+    for trend in ["", "_detrended"]:
+        for col in [f"mean_seas5{trend}", f"mean_era5{trend}"]:
+            df_compare_metrics[f"{col}_bool"] = df_compare_metrics[
+                col
+            ] >= df_compare_metrics[col].quantile(1 - 1 / rp)
+        p = df_compare_metrics[f"mean_seas5{trend}_bool"].sum()
+        pp = df_compare_metrics[f"mean_era5{trend}_bool"].sum()
+        tp = (
+            df_compare_metrics[
+                [f"mean_era5{trend}_bool", f"mean_seas5{trend}_bool"]
+            ]
+            .all(axis=1)
+            .sum()
+        )
+        tpr = tp / p
+        dicts.append(
+            {
+                "rp": rp,
+                "tpr": tpr,
+                "trend": "raw" if trend == "" else "detrended",
+            }
+        )
+
+df_plot_metrics = pd.DataFrame(dicts)
+ax = df_plot_metrics.pivot(index="rp", columns="trend", values="tpr")[
+    ["raw", "detrended"]
+].plot()
+ax.set_ylim(0, 1)
+ax.set_ylabel("TPR/PPV/F1")
 ```
 
 ```python
@@ -427,9 +552,33 @@ ax.annotate(
 
 ```python
 fig, ax = plot_comparison(
-    df_compare,
+    df_compare_full,
     "mean_seas5",
     "mean_era5",
+)
+
+current_pred = df_compare_full.set_index("year").loc[2025, "mean_seas5"]
+ax.axvline(
+    current_pred,
+    color="mediumorchid",
+    linestyle="--",
+)
+```
+
+```python
+fig, ax = plot_comparison(
+    df_compare_full,
+    "mean_seas5_detrended",
+    "mean_era5_detrended",
+)
+
+current_pred = df_compare_full.set_index("year").loc[
+    2025, "mean_seas5_detrended"
+]
+ax.axvline(
+    current_pred,
+    color="mediumorchid",
+    linestyle="--",
 )
 ```
 
@@ -438,6 +587,32 @@ fig, ax = plot_comparison(
     df_compare,
     "mean_seas5_detrended",
     "mean_era5_detrended",
+    sizecol="total_affected",
+)
+
+current_pred = df_compare_full.set_index("year").loc[
+    2025, "mean_seas5_detrended"
+]
+ax.axvline(
+    current_pred,
+    color="mediumorchid",
+    linestyle="--",
+)
+ax.annotate(
+    "2025 forecast",
+    (current_pred, df_compare["mean_era5_detrended"].min()),
+    rotation=90,
+    va="bottom",
+    ha="right",
+    color="mediumorchid",
+)
+
+ax.set_title(
+    f"Detrended observations vs. forecast ({adm_name}, {valid_mo_str})"
+)
+ax.set_ylabel(f"Observed mean daily rainfall, detrended (mm) [ERA5]")
+ax.set_xlabel(
+    f"Forecasted mean daily rainfall, detrended, issued {issued_mo_str} (mm) [SEAS5]"
 )
 ```
 
@@ -457,8 +632,8 @@ df_modeling.loc[df_modeling["year"] == 2025, "mean_diff_exp"] = np.nan
 
 ```python
 # Select inputs and output
-# input_cols = ["year_dummy", "mean_seas5"]
-input_cols = ["min_exp", "mean_seas5"]
+input_cols = ["year_dummy", "mean_seas5"]
+# input_cols = ["min_exp", "mean_seas5"]
 output_col = "total_affected"
 X = df_modeling[input_cols]
 y = df_modeling[output_col]

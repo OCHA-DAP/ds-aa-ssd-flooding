@@ -37,6 +37,7 @@ import ocha_stratus as stratus
 
 from src.datasources import seas5, era5
 from src.utils import blob_utils, rp_calc
+from src.utils.timeseries import detrend_column
 ```
 
 ```python
@@ -78,10 +79,10 @@ df_seas5.groupby(df_seas5["valid_date"].dt.month)["mean"].mean()
 ```
 
 ```python
-issued_month = 4
-valid_months = [4, 5, 7, 8]
+issued_month = 5
+# valid_months = [5, 6, 7, 8, 9, 10]
 # valid_months = [4, 5, 7, 8, 9, 10]
-# valid_months = [7, 8, 9]
+valid_months = [7, 8, 9]
 # valid_months = [4]
 min_year = 2000
 
@@ -150,6 +151,85 @@ ax.spines["right"].set_visible(False)
 ```
 
 ```python
+issued_month = 5
+# valid_months = [5, 6, 7, 8, 9, 10]
+# valid_months = [4, 5, 7, 8, 9, 10]
+valid_months = [7, 8, 9]
+# valid_months = [4]
+min_year = 2000
+
+valid_mo_str = "".join([calendar.month_abbr[x][0] for x in valid_months])
+
+df_plot = (
+    df_seas5[
+        (df_seas5["valid_date"].dt.month.isin(valid_months))
+        & (df_seas5["issued_date"].dt.month == issued_month)
+        & (df_seas5["valid_date"].dt.year >= min_year)
+    ]
+    .groupby("issued_date")["mean"]
+    .mean()
+    .reset_index()
+)
+df_plot["year"] = df_plot["issued_date"].dt.year
+df_plot = detrend_column(df_plot, "mean", index_col="year")
+
+df_plot = rp_calc.calculate_one_group_rp(
+    df_plot, ascending=False, col_name="mean_detrended"
+)
+
+issued_month_str = calendar.month_abbr[issued_month]
+
+valid_months_str = "".join([calendar.month_abbr[x][0] for x in valid_months])
+
+thresh = df_plot["mean"].quantile(2 / 3)
+
+fig, ax = plt.subplots(dpi=200)
+
+current_row = df_plot[df_plot["issued_date"].dt.year == 2025].iloc[0]
+
+ax.annotate(
+    f"  2025\n  RP = {current_row['mean_detrended_rp']:.1f} yrs",
+    (2025, current_row["mean_detrended"]),
+    ha="left",
+    va="center",
+    fontsize=8,
+)
+
+for rp, color in zip([3, 5], ["darkorange", "crimson"]):
+    thresh = df_plot["mean_detrended"].quantile((rp - 1) / rp)
+    ax.axhline(thresh, color=color)
+    ax.annotate(
+        f" {rp}-yr RP", (2027, thresh), va="center", ha="left", color=color
+    )
+
+df_plot.plot(x="year", y="mean_detrended", ax=ax, legend=False, color="k")
+
+ax.plot(
+    [2025],
+    [current_row["mean_detrended"]],
+    marker=".",
+    color="k",
+    markersize=10,
+)
+
+ax.set_title(
+    f"{adm_name} SEAS5 forecast (since {min_year}, detrended)\n"
+    f"Issued: {issued_month_str}, Valid: {valid_mo_str}"
+)
+ax.set_xlabel("Year")
+ax.set_ylabel("Mean daily precipitation,\n averaged over whole country (mm)")
+
+ax.set_xlim(left=min_year, right=2027)
+
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
+```
+
+```python
+df_plot
+```
+
+```python
 df_compare = df_seas5.merge(
     df_era5,
     on=["valid_date", "pcode", "adm_level", "iso3"],
@@ -176,6 +256,10 @@ corr = df_season.corr().loc["mean_s", "mean_e"]
 
 ```python
 corr
+```
+
+```python
+df_season
 ```
 
 ```python
