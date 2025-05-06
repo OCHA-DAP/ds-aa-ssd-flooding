@@ -42,7 +42,7 @@ df_era5.dtypes
 ```python
 df_era5[df_era5["valid_date"].dt.year < 2025].groupby(
     df_era5["valid_date"].dt.month
-)["mean"].mean().plot()
+)["mean"].mean().plot(kind="bar")
 ```
 
 ```python
